@@ -123,3 +123,10 @@ func (b *Broker) DeleteGroup(name string) {
 
 	group.shutdown()
 }
+
+func (b *Broker) DeleteStream(sname string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	delete(b.streams, sname)
+}

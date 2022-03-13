@@ -29,6 +29,14 @@ func createStream(sname string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
+func deleteStream(sname string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/streams/%s", endpoint, sname), nil)
+	if err != nil {
+		return nil, err
+	}
+	return http.DefaultClient.Do(req)
+}
+
 func listStreams() (map[string]core.StreamInfo, error) {
 	resp, err := http.Get(fmt.Sprintf("%s/streams", endpoint))
 	if err != nil {
@@ -49,7 +57,7 @@ func listStreams() (map[string]core.StreamInfo, error) {
 
 const endpoint = "http://localhost:8080"
 
-func TestTopicCreate(t *testing.T) {
+func TestCreateStreamAndDelete(t *testing.T) {
 	setupServer(t)
 
 	n := 100
@@ -68,8 +76,18 @@ func TestTopicCreate(t *testing.T) {
 	}
 
 	for i := 0; i < n; i++ {
-		resp, err := createStream("stream:" + strconv.Itoa(i))
+		sname := "stream:" + strconv.Itoa(i)
+		resp, err := createStream(sname)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusConflict, resp.StatusCode)
+
+		resp, err = deleteStream(sname)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
 	}
+
+	streams, err = listStreams()
+	require.NoError(t, err)
+
+	require.Empty(t, streams)
 }

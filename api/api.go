@@ -69,6 +69,8 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 		} else {
 			c.streamMessages(w, r, cgroup, name)
 		}
+	case "DELETE":
+		c.b.DeleteStream(name)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -97,7 +99,7 @@ func handleListStreams(c *Controller, w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	channels := c.b.ListChannels()
+	channels := c.b.ListStreams()
 	text, err := json.Marshal(channels)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
