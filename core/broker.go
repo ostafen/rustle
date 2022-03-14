@@ -8,13 +8,13 @@ import (
 type Broker struct {
 	mu      sync.Mutex
 	streams map[string]*stream
-	cGroups map[string]*cGroup
+	cGroups map[string]*consumerGroup
 }
 
 func NewBroker() *Broker {
 	return &Broker{
 		streams: make(map[string]*stream),
-		cGroups: make(map[string]*cGroup),
+		cGroups: make(map[string]*consumerGroup),
 	}
 }
 
@@ -56,10 +56,10 @@ func (b *Broker) CreateStream(name string) bool {
 	return true
 }
 
-func (b *Broker) getOrCreateGroup(name string) *cGroup {
+func (b *Broker) getOrCreateGroup(name string) *consumerGroup {
 	group, ok := b.cGroups[name]
 	if !ok {
-		group = newCGroup(name)
+		group = newConsumerGroup(name)
 		b.cGroups[name] = group
 	}
 	return group
@@ -75,7 +75,7 @@ func (b *Broker) RegisterConsumer(cgroup string, w io.Writer, streams ...string)
 	for _, sname := range streams {
 		stream, ok := b.streams[sname]
 		if ok {
-			stream.addGroup(group)
+			stream.addConsumer(cgroup, c)
 		}
 	}
 	c.start(w)

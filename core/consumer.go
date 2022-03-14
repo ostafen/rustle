@@ -54,23 +54,19 @@ func (c *consumer) Stop() {
 	}
 }
 
-type cGroup struct {
-	name         string
-	pending      map[uint64]struct{}
-	nextConsumer int
-	consumers    []*consumer
+type consumerGroup struct {
+	name      string
+	consumers []*consumer
 }
 
-func newCGroup(name string) *cGroup {
-	return &cGroup{
-		name:         name,
-		pending:      map[uint64]struct{}{},
-		consumers:    make([]*consumer, 0),
-		nextConsumer: 0,
+func newConsumerGroup(name string) *consumerGroup {
+	return &consumerGroup{
+		name:      name,
+		consumers: make([]*consumer, 0),
 	}
 }
 
-func (group *cGroup) newConsumer() *consumer {
+func (group *consumerGroup) newConsumer() *consumer {
 	c := &consumer{
 		outCh: make(chan *Message, 1024),
 		quit:  make(chan struct{}, 1),
@@ -79,20 +75,7 @@ func (group *cGroup) newConsumer() *consumer {
 	return c
 }
 
-func (group *cGroup) next() int {
-	next := group.nextConsumer % len(group.consumers)
-	group.nextConsumer++
-	return next
-}
-
-func (group *cGroup) send(msg *Message) {
-	group.pending[msg.Timestamp] = struct{}{}
-
-	c := group.consumers[group.next()]
-	c.send(msg)
-}
-
-func (group *cGroup) shutdown() {
+func (group *consumerGroup) shutdown() {
 	for _, c := range group.consumers {
 		c.Stop()
 	}
