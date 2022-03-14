@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,4 +141,68 @@ func TestStreamSubscription(t *testing.T) {
 	}
 	require.Equal(t, n, count)
 	require.NoError(t, err)
+}
+
+func TestStreamSubscriptionWithGroup(t *testing.T) {
+	close := setupServer(t)
+	defer close()
+
+	resp, err := createStream("test")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	const n = 100
+	const nConsumers = n / 10
+	const messagesPerConsumer = n / nConsumers
+
+	consumers := make([]*client.Consumer, 0)
+	for i := 0; i < nConsumers; i++ {
+		c := client.NewConsumer(&client.ConsumerConfig{
+			Host:  endpoint,
+			Group: "test-group",
+		})
+		consumers = append(consumers, c)
+	}
+
+	defer func() {
+		for _, c := range consumers {
+			c.Close()
+		}
+	}()
+
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		for i := 0; i < n; i++ {
+			resp, err = sendMessage("test", "ciao")
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+		}
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(nConsumers)
+
+	var counters [nConsumers]int
+
+	for i, c := range consumers {
+		go func(i int, c *client.Consumer) {
+			defer wg.Done()
+
+			require.NoError(t, c.Subscribe("test"))
+
+			counters[i] = 0
+			for _, err := c.Listen(); err == nil; _, err = c.Listen() {
+				counters[i]++
+				if counters[i] >= messagesPerConsumer {
+					break
+				}
+			}
+		}(i, c)
+	}
+
+	wg.Wait()
+
+	for i := 0; i < nConsumers; i++ {
+		require.Equal(t, messagesPerConsumer, counters[i])
+	}
 }
