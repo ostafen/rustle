@@ -1,24 +1,38 @@
 package rustle
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/ostafen/rustle/api"
+	"github.com/ostafen/rustle/client"
 	"github.com/ostafen/rustle/core"
 	"github.com/stretchr/testify/require"
 )
 
-func setupServer(t *testing.T) {
+func setupServer(t *testing.T) func() {
 	var err error
+	r := api.CreateRouter()
+	s := &http.Server{Addr: ":8080", Handler: r}
+
+	done := make(chan struct{}, 1)
 	go func() {
-		r := api.CreateRouter()
-		err = http.ListenAndServe(":8080", r)
+		err = s.ListenAndServe()
+		done <- struct{}{}
 	}()
+	time.Sleep(time.Millisecond * 10) // ensure that err has been set
+
 	require.NoError(t, err)
+	return func() {
+		s.Shutdown(context.Background())
+		<-done
+	}
 }
 
 func createStream(sname string) (*http.Response, error) {
@@ -37,28 +51,15 @@ func deleteStream(sname string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
-func listStreams() (map[string]core.StreamInfo, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/streams", endpoint))
-	if err != nil {
-		return nil, err
-	}
-
-	sInfos := make([]core.StreamInfo, 0)
-	if err := json.NewDecoder(resp.Body).Decode(&sInfos); err != nil {
-		return nil, err
-	}
-
-	infoMap := make(map[string]core.StreamInfo)
-	for _, info := range sInfos {
-		infoMap[info.Name] = info
-	}
-	return infoMap, err
-}
-
 const endpoint = "http://localhost:8080"
 
 func TestCreateStreamAndDelete(t *testing.T) {
-	setupServer(t)
+	close := setupServer(t)
+	defer close()
+
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
 
 	n := 100
 	for i := 0; i < n; i++ {
@@ -67,11 +68,16 @@ func TestCreateStreamAndDelete(t *testing.T) {
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
 	}
 
-	streams, err := listStreams()
+	streamInfos, err := cli.ListStreams()
 	require.NoError(t, err)
 
+	infoMap := make(map[string]core.StreamInfo)
+	for _, info := range streamInfos {
+		infoMap[info.Name] = info
+	}
+
 	for i := 0; i < n; i++ {
-		_, ok := streams["stream:"+strconv.Itoa(i)]
+		_, ok := infoMap["stream:"+strconv.Itoa(i)]
 		require.True(t, ok)
 	}
 
@@ -86,8 +92,52 @@ func TestCreateStreamAndDelete(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
-	streams, err = listStreams()
+	streamInfos, err = cli.ListStreams()
 	require.NoError(t, err)
 
-	require.Empty(t, streams)
+	require.Empty(t, streamInfos)
+}
+
+func sendMessage(sname string, body interface{}) (*http.Response, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return http.Post(fmt.Sprintf("%s/streams/%s", endpoint, sname), "application/json", bytes.NewBuffer(data))
+}
+
+func TestStreamSubscription(t *testing.T) {
+	close := setupServer(t)
+	defer close()
+
+	resp, err := createStream("test")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	c := client.NewConsumer(&client.ConsumerConfig{
+		Host: endpoint,
+	})
+	defer c.Close()
+
+	n := 100
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		for i := 0; i < n; i++ {
+			resp, err = sendMessage("test", "ciao")
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+		}
+	}()
+
+	require.NoError(t, c.Subscribe("test"))
+
+	count := 0
+	for _, err := c.Listen(); err == nil; _, err = c.Listen() {
+		count++
+		if count >= n {
+			break
+		}
+	}
+	require.Equal(t, n, count)
+	require.NoError(t, err)
 }
