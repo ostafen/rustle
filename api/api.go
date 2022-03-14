@@ -56,16 +56,15 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 		}
 	case "POST":
-		msg := &core.Message{}
-		err := json.NewDecoder(r.Body).Decode(msg)
-		if err != nil {
+		var body interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
-			c.b.NotifyMessage(msg)
+			c.b.NotifyMessage(core.NewMessage(name, body))
 		}
 	case "GET":
 		if !c.b.HasStream(name) {
-			w.WriteHeader(http.StatusFound)
+			w.WriteHeader(http.StatusNotFound)
 		} else {
 			c.streamMessages(w, r, cgroup, name)
 		}
