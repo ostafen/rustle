@@ -30,7 +30,7 @@ func (c *consumer) start(w io.Writer) {
 					return
 				}
 
-				_, err = w.Write(data)
+				_, err = w.Write([]byte(string(data) + "\n"))
 				if err != nil {
 					return
 				}
