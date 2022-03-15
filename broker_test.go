@@ -18,9 +18,11 @@ import (
 )
 
 func setupServer(t *testing.T) func() {
+	broker := core.NewBroker()
+	controller := api.NewController(broker)
+
 	var err error
-	r := api.CreateRouter()
-	s := &http.Server{Addr: ":8080", Handler: r}
+	s := &http.Server{Addr: ":8080", Handler: controller.GetRouter()}
 
 	done := make(chan struct{}, 1)
 	go func() {

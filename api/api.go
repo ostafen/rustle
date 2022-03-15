@@ -149,14 +149,17 @@ func (c *Controller) handleGroups() http.HandlerFunc {
 	}
 }
 
-func CreateRouter() *mux.Router {
-	c := &Controller{b: core.NewBroker()}
+func NewController(broker *core.Broker) *Controller {
+	return &Controller{
+		b: broker,
+	}
+}
 
+func (c *Controller) GetRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/streams", c.handleListStreams())
 	r.HandleFunc("/streams/{name}", c.handleStreams())
 	r.HandleFunc("/streams/{name}/messages", c.handleStreamSubscription())
 	r.HandleFunc("/groups/{name}", c.handleGroups())
-
 	return r
 }
