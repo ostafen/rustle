@@ -8,6 +8,15 @@ import (
 	"github.com/ostafen/rustle/core"
 )
 
+func writeJsonBody(rw http.ResponseWriter, v interface{}) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		rw.WriteHeader(http.StatusInternalServerError)
+	} else {
+		rw.Write(data)
+	}
+}
+
 type FlushWriter struct {
 	w http.ResponseWriter
 }
@@ -84,17 +93,24 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 
 func handleGroups(c *Controller, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["name"]
+	groupName := vars["name"]
 
 	switch r.Method {
 	case "PUT":
-		if c.b.CreateGroup(name) {
+		if c.b.CreateGroup(groupName) {
 			w.WriteHeader(http.StatusCreated)
 		} else {
 			w.WriteHeader(http.StatusConflict)
 		}
+	case "GET":
+		info, err := c.b.GetConsumerGroupInfos(groupName)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			writeJsonBody(w, info)
+		}
 	case "DELETE":
-		c.b.DeleteGroup(name)
+		c.b.DeleteGroup(groupName)
 	}
 }
 
@@ -106,12 +122,7 @@ func handleListStreams(c *Controller, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	channels := c.b.ListStreams()
-	text, err := json.Marshal(channels)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	} else {
-		w.Write(text)
-	}
+	writeJsonBody(w, channels)
 }
 
 func (c *Controller) handleListStreams() http.HandlerFunc {
