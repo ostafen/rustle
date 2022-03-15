@@ -38,6 +38,30 @@ func (b *Broker) ListStreams() []StreamInfo {
 	return streams
 }
 
+type ConsumerInfo struct {
+	Id uint64 `json:"name"`
+}
+
+type ConsumerGroupInfo struct {
+	Consumers []ConsumerInfo `json:"consumers"`
+}
+
+func (b *Broker) GetConsumerGroupInfos(name string) (*ConsumerGroupInfo, error) {
+	if _, ok := b.cGroups[name]; !ok {
+		return nil, fmt.Errorf("no consumer group with name \"%s\"", name)
+	}
+
+	cInfos := make([]ConsumerInfo, 0)
+	group := b.cGroups[name]
+	for _, c := range group.consumers {
+		cInfos = append(cInfos, ConsumerInfo{Id: c.id})
+	}
+
+	return &ConsumerGroupInfo{
+		Consumers: cInfos,
+	}, nil
+}
+
 func (b *Broker) hasStream(name string) bool {
 	_, ok := b.streams[name]
 	return ok
