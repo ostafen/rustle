@@ -24,7 +24,7 @@ type Controller struct {
 	b *core.Broker
 }
 
-func (c *Controller) streamMessages(rw http.ResponseWriter, r *http.Request, cGroup string, stream string) {
+func handleStreamSubscription(c *Controller, rw http.ResponseWriter, r *http.Request) {
 	// Set the headers related to event streaming.
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
@@ -33,7 +33,14 @@ func (c *Controller) streamMessages(rw http.ResponseWriter, r *http.Request, cGr
 
 	fw := &FlushWriter{rw}
 
-	consumer := c.b.RegisterConsumer(cGroup, fw, stream)
+	cGroup := r.FormValue("cgroup")
+	stream := mux.Vars(r)["name"]
+
+	consumer, err := c.b.RegisterConsumer(cGroup, fw, stream)
+	if err != nil {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	go func() {
 		<-r.Context().Done()
@@ -47,7 +54,6 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
 
-	cgroup := r.FormValue("cgroup")
 	switch r.Method {
 	case "PUT":
 		if c.b.CreateStream(name) {
@@ -63,11 +69,11 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 			c.b.NotifyMessage(core.NewMessage(name, body))
 		}
 	case "GET":
-		if !c.b.HasStream(name) {
+		/*if !c.b.HasStream(name) {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
 			c.streamMessages(w, r, cgroup, name)
-		}
+		}*/
 	case "DELETE":
 		c.b.DeleteStream(name)
 	default:
@@ -119,6 +125,12 @@ func (c *Controller) handleStreams() http.HandlerFunc {
 	}
 }
 
+func (c *Controller) handleStreamSubscription() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handleStreamSubscription(c, w, r)
+	}
+}
+
 func (c *Controller) handleGroups() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleGroups(c, w, r)
@@ -131,6 +143,8 @@ func CreateRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/streams", c.handleListStreams())
 	r.HandleFunc("/streams/{name}", c.handleStreams())
+	r.HandleFunc("/streams/{name}/messages", c.handleStreamSubscription())
 	r.HandleFunc("/groups/{name}", c.handleGroups())
+
 	return r
 }

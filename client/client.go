@@ -53,7 +53,7 @@ func NewConsumer(c *ConsumerConfig) *Consumer {
 }
 
 func (c *Consumer) Subscribe(stream string) error {
-	uri := fmt.Sprintf("%s/streams/%s", c.conf.Host, stream)
+	uri := fmt.Sprintf("%s/streams/%s/messages", c.conf.Host, stream)
 	if c.conf.Group != "" {
 		uri += "?cgroup=" + c.conf.Group
 	}

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"io"
 	"sync"
 )
@@ -36,19 +37,23 @@ func (b *Broker) ListStreams() []StreamInfo {
 	return streams
 }
 
+func (b *Broker) hasStream(name string) bool {
+	_, ok := b.streams[name]
+	return ok
+}
+
 func (b *Broker) HasStream(name string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	_, ok := b.streams[name]
-	return ok
+	return b.hasStream(name)
 }
 
 func (b *Broker) CreateStream(name string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if _, ok := b.streams[name]; ok {
+	if b.hasStream(name) {
 		return false
 	}
 
@@ -65,21 +70,25 @@ func (b *Broker) getOrCreateGroup(name string) *consumerGroup {
 	return group
 }
 
-func (b *Broker) RegisterConsumer(cgroup string, w io.Writer, streams ...string) *consumer {
+func (b *Broker) RegisterConsumer(cgroup string, w io.Writer, streams ...string) (*consumer, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	for _, stream := range streams {
+		if !b.hasStream(stream) {
+			return nil, fmt.Errorf("no such stream with name %s", stream)
+		}
+	}
 
 	group := b.getOrCreateGroup(cgroup)
 	c := group.newConsumer()
 
 	for _, sname := range streams {
-		stream, ok := b.streams[sname]
-		if ok {
-			stream.addConsumer(cgroup, c)
-		}
+		stream := b.streams[sname]
+		stream.addConsumer(cgroup, c)
 	}
 	c.start(w)
-	return c
+	return c, nil
 }
 
 func (b *Broker) NotifyMessage(msg *Message) {
