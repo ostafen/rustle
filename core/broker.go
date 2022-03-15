@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"io"
+	"log"
 	"sync"
 )
 
@@ -81,14 +82,29 @@ func (b *Broker) RegisterConsumer(cgroup string, w io.Writer, streams ...string)
 	}
 
 	group := b.getOrCreateGroup(cgroup)
-	c := group.newConsumer()
+	c := group.addConsumer()
 
 	for _, sname := range streams {
 		stream := b.streams[sname]
-		stream.addConsumer(cgroup, c)
+		stream.attachConsumer(cgroup, c)
 	}
 	c.start(w)
 	return c, nil
+}
+
+func (b *Broker) UnregisterConsumer(c *consumer) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if _, ok := b.cGroups[c.group]; !ok {
+		log.Fatal("trying to detach consumer on a non existing group")
+	}
+
+	b.cGroups[c.group].removeConsumer(c)
+
+	for _, stream := range b.streams {
+		stream.detachConsumer(c)
+	}
 }
 
 func (b *Broker) NotifyMessage(msg *Message) {
@@ -114,6 +130,7 @@ func (b *Broker) CreateGroup(name string) bool {
 	return true
 }
 
+// TODO: do not allow to delete group if there are active consumers
 func (b *Broker) DeleteGroup(name string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

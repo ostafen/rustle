@@ -1,6 +1,7 @@
 package core
 
 import (
+	"log"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -28,6 +29,22 @@ type streamConsumerGroup struct {
 	nextConsumer int
 }
 
+func (s *streamConsumerGroup) add(c *consumer) {
+	s.consumers = append(s.consumers, c)
+}
+
+func (s *streamConsumerGroup) remove(id uint64) {
+	for i, c := range s.consumers {
+		if c.id == id {
+			temp := s.consumers[0]
+			s.consumers[0] = s.consumers[i]
+			s.consumers[i] = temp
+			s.consumers = s.consumers[1:]
+			return
+		}
+	}
+}
+
 func (l *streamConsumerGroup) next() int {
 	next := l.nextConsumer % len(l.consumers)
 	l.nextConsumer++
@@ -53,7 +70,7 @@ func newStream() *stream {
 	}
 }
 
-func (s *stream) addConsumer(cgroup string, c *consumer) {
+func (s *stream) attachConsumer(cgroup string, c *consumer) {
 	if s.group[cgroup] == nil {
 		s.group[cgroup] = &streamConsumerGroup{
 			consumers:    make([]*consumer, 0),
@@ -61,9 +78,14 @@ func (s *stream) addConsumer(cgroup string, c *consumer) {
 			nextConsumer: 0,
 		}
 	}
+	s.group[cgroup].add(c)
+}
 
-	l := s.group[cgroup]
-	l.consumers = append(l.consumers, c)
+func (s *stream) detachConsumer(c *consumer) {
+	if s.group[c.group] == nil {
+		log.Fatal("detach consumer")
+	}
+	s.group[c.group].remove(c.id)
 }
 
 func (s *stream) deleteGroup(name string) {

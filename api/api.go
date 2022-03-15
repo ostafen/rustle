@@ -41,6 +41,7 @@ func handleStreamSubscription(c *Controller, rw http.ResponseWriter, r *http.Req
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
+	defer c.b.UnregisterConsumer(consumer)
 
 	go func() {
 		<-r.Context().Done()

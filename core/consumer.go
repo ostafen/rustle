@@ -7,6 +7,8 @@ import (
 )
 
 type consumer struct {
+	group string
+	id    uint64
 	outCh chan *Message
 	quit  chan struct{}
 	wg    sync.WaitGroup
@@ -55,24 +57,32 @@ func (c *consumer) Stop() {
 }
 
 type consumerGroup struct {
-	name      string
-	consumers []*consumer
+	nextConsumerId uint64
+	name           string
+	consumers      map[uint64]*consumer
 }
 
 func newConsumerGroup(name string) *consumerGroup {
 	return &consumerGroup{
 		name:      name,
-		consumers: make([]*consumer, 0),
+		consumers: make(map[uint64]*consumer),
 	}
 }
 
-func (group *consumerGroup) newConsumer() *consumer {
+func (group *consumerGroup) addConsumer() *consumer {
 	c := &consumer{
+		group: group.name,
+		id:    group.nextConsumerId,
 		outCh: make(chan *Message, 1024),
 		quit:  make(chan struct{}, 1),
 	}
-	group.consumers = append(group.consumers, c)
+	group.consumers[group.nextConsumerId] = c
+	group.nextConsumerId++
 	return c
+}
+
+func (group *consumerGroup) removeConsumer(c *consumer) {
+	delete(group.consumers, c.id)
 }
 
 func (group *consumerGroup) shutdown() {
