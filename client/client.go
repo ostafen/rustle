@@ -35,6 +35,16 @@ func (c *Client) ListStreams() ([]core.StreamInfo, error) {
 	return sInfos, err
 }
 
+func (c *Client) GetConsumerGroupInfo(cgroup string) (*core.ConsumerGroupInfo, error) {
+	resp, err := http.Get(fmt.Sprintf("%s/groups/%s", c.conf.Host, cgroup))
+	if err != nil {
+		return nil, err
+	}
+	info := &core.ConsumerGroupInfo{}
+	err = json.NewDecoder(resp.Body).Decode(info)
+	return info, err
+}
+
 type ConsumerConfig struct {
 	Host  string
 	Group string
