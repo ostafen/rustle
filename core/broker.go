@@ -39,7 +39,7 @@ func (b *Broker) ListStreams() []StreamInfo {
 }
 
 type ConsumerInfo struct {
-	Id uint64 `json:"name"`
+	Id uint64 `json:"id"`
 }
 
 type ConsumerGroupInfo struct {
@@ -47,6 +47,9 @@ type ConsumerGroupInfo struct {
 }
 
 func (b *Broker) GetConsumerGroupInfos(name string) (*ConsumerGroupInfo, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	if _, ok := b.cGroups[name]; !ok {
 		return nil, fmt.Errorf("no consumer group with name \"%s\"", name)
 	}
