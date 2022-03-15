@@ -82,12 +82,7 @@ func (b *Broker) RegisterConsumer(cgroup string, w io.Writer, streams ...string)
 	}
 
 	group := b.getOrCreateGroup(cgroup)
-	c := group.addConsumer()
-
-	for _, sname := range streams {
-		stream := b.streams[sname]
-		stream.attachConsumer(cgroup, c)
-	}
+	c := group.addConsumerWithSubscriptions(streams)
 	c.start(w)
 	return c, nil
 }
@@ -101,10 +96,6 @@ func (b *Broker) UnregisterConsumer(c *consumer) {
 	}
 
 	b.cGroups[c.group].removeConsumer(c)
-
-	for _, stream := range b.streams {
-		stream.detachConsumer(c)
-	}
 }
 
 func (b *Broker) NotifyMessage(msg *Message) {
@@ -117,6 +108,10 @@ func (b *Broker) NotifyMessage(msg *Message) {
 		return
 	}
 	s.addMessage(msg)
+
+	for _, group := range b.cGroups {
+		group.notify(msg)
+	}
 }
 
 func (b *Broker) CreateGroup(name string) bool {
@@ -140,9 +135,6 @@ func (b *Broker) DeleteGroup(name string) {
 		return
 	}
 
-	for _, stream := range b.streams {
-		stream.deleteGroup(name)
-	}
 	delete(b.cGroups, name)
 
 	b.mu.Unlock()
