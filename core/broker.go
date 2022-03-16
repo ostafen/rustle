@@ -175,3 +175,37 @@ func (b *Broker) DeleteStream(sname string) {
 
 	delete(b.streams, sname)
 }
+
+func (b *Broker) ListPending(sname string, cgroup string) ([]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	group, ok := b.cGroups[cgroup]
+	if !ok {
+		return nil, fmt.Errorf("no such group with name %s", cgroup)
+	}
+
+	s := group.subscriptions[sname]
+	if s == nil {
+		return nil, nil
+	}
+	return s.pendingMessages(), nil
+}
+
+func (b *Broker) AckMessages(cgroup string, ackMap map[string][]string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	group, ok := b.cGroups[cgroup]
+	if !ok {
+		return fmt.Errorf("no such group with name %s", cgroup)
+	}
+
+	for stream, acks := range ackMap {
+		subscription := group.subscriptions[stream]
+		if subscription != nil {
+			subscription.ackMessages(acks)
+		}
+	}
+	return nil
+}
