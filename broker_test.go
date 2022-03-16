@@ -237,3 +237,50 @@ func TestGetConsumerGroupInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, len(info.Consumers))
 }
+
+func TestPendingQueue(t *testing.T) {
+	close := setupServer(t)
+	defer close()
+
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	err := cli.CreateStream("test-stream")
+	require.NoError(t, err)
+
+	c := client.NewConsumer(&client.ConsumerConfig{
+		Host:  endpoint,
+		Group: "test-group",
+	})
+
+	nMessages := 100
+
+	go func() {
+		c.Subscribe("test-stream")
+	}()
+
+	// ensure consumer gets subscribed before the first message is sent
+	time.Sleep(time.Millisecond * 10)
+	defer c.Close()
+
+	for i := 0; i < nMessages; i++ {
+		resp, err := sendMessage("test-stream", "Hi! This is a test.")
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+
+	pending, err := cli.ListPendingQueue("test-stream", "test-group")
+	require.NoError(t, err)
+	require.Len(t, pending, 100)
+
+	ackMap := map[string][]string{
+		"test-stream": pending[:10], // only ack first 10 messages
+	}
+
+	require.NoError(t, cli.Ack("test-group", ackMap))
+
+	pending, err = cli.ListPendingQueue("test-stream", "test-group")
+	require.NoError(t, err)
+	require.Len(t, pending, 90)
+}
