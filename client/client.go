@@ -2,7 +2,9 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,10 +52,16 @@ type ConsumerConfig struct {
 	Group string
 }
 
+type subscription struct {
+	resp   *http.Response
+	ctx    context.Context
+	cancel context.CancelFunc
+	sc     *bufio.Scanner
+}
+
 type Consumer struct {
-	conf             *ConsumerConfig
-	currSubscription *http.Response
-	sc               *bufio.Scanner
+	conf *ConsumerConfig
+	s    *subscription
 }
 
 func NewConsumer(c *ConsumerConfig) *Consumer {
@@ -68,19 +76,40 @@ func (c *Consumer) Subscribe(stream string) error {
 		uri += "?cgroup=" + c.conf.Group
 	}
 
-	resp, err := http.Get(uri)
-	c.currSubscription = resp
-	c.sc = bufio.NewScanner(resp.Body)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.s = &subscription{
+		ctx:    ctx,
+		cancel: cancel,
+	}
+	req = req.WithContext(ctx)
+	resp, err := client.Do(req)
+	if resp != nil {
+		c.s.resp = resp
+		c.s.sc = bufio.NewScanner(resp.Body)
+	}
 	return err
 }
 
+var ErrNoActiveSubscription = errors.New("no active subscription")
+
 func (c *Consumer) Listen() (*core.Message, error) {
-	if c.sc.Scan() {
-		if err := c.sc.Err(); err != nil {
+	if c.s == nil {
+		return nil, ErrNoActiveSubscription
+	}
+
+	s := c.s
+	if s.sc.Scan() {
+		if err := s.sc.Err(); err != nil {
 			return nil, err
 		}
 
-		jsonText := c.sc.Text()
+		jsonText := s.sc.Text()
 		msg := &core.Message{}
 
 		if err := json.Unmarshal([]byte(jsonText), msg); err != nil {
@@ -92,8 +121,21 @@ func (c *Consumer) Listen() (*core.Message, error) {
 }
 
 func (c *Consumer) Close() error {
-	if c.currSubscription != nil {
-		return c.currSubscription.Body.Close()
+	s := c.s
+	if s == nil {
+		return nil
+	}
+
+	if s.cancel != nil { // this is executed even if request succeeds
+		s.cancel()
+		<-s.ctx.Done()
+		s.cancel = nil
+	}
+
+	if s.resp != nil {
+		err := s.resp.Body.Close()
+		s.resp.Body = nil
+		return err
 	}
 	return nil
 }
