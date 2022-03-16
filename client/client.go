@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -69,6 +70,16 @@ func (c *Client) ListStreams() ([]core.StreamInfo, error) {
 	sInfos := make([]core.StreamInfo, 0)
 	err = json.NewDecoder(resp.Body).Decode(&sInfos)
 	return sInfos, err
+}
+
+func (c *Client) ListPendingQueue(sname string, group string) ([]string, error) {
+	resp, err := http.Get(fmt.Sprintf("%s/streams/%s/messages/pending?cgroup=%s", c.conf.Host, sname, group))
+	if err != nil {
+		return nil, err
+	}
+	pending := make([]string, 0)
+	err = json.NewDecoder(resp.Body).Decode(&pending)
+	return pending, err
 }
 
 func (c *Client) GetConsumerGroupInfo(cgroup string) (*core.ConsumerGroupInfo, error) {
@@ -152,6 +163,19 @@ func (c *Consumer) Listen() (*core.Message, error) {
 		return msg, nil
 	}
 	return nil, io.EOF
+}
+
+func (c *Client) Ack(cgroup string, ackMap map[string][]string) error {
+	data, err := json.Marshal(ackMap)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(fmt.Sprintf("%s/ack?cgroup=%s", c.conf.Host, cgroup), "application/json", bytes.NewBuffer(data))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unable to ack messages")
+	}
+	return err
 }
 
 func (c *Consumer) Close() error {
