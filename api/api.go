@@ -125,6 +125,42 @@ func handleListStreams(c *Controller, w http.ResponseWriter, r *http.Request) {
 	writeJsonBody(w, channels)
 }
 
+func handlePending(c *Controller, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	streamName := mux.Vars(r)["name"]
+	groupName := r.FormValue("cgroup")
+
+	pending, err := c.b.ListPending(streamName, groupName)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} else {
+		writeJsonBody(w, pending)
+	}
+}
+
+func handleAck(c *Controller, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	groupName := r.FormValue("cgroup")
+
+	acks := make(map[string][]string)
+	if err := json.NewDecoder(r.Body).Decode(&acks); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if err := c.b.AckMessages(groupName, acks); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+}
+
 func (c *Controller) handleListStreams() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleListStreams(c, w, r)
@@ -149,6 +185,18 @@ func (c *Controller) handleGroups() http.HandlerFunc {
 	}
 }
 
+func (c *Controller) handlePending() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handlePending(c, w, r)
+	}
+}
+
+func (c *Controller) handleAck() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handleAck(c, w, r)
+	}
+}
+
 func NewController(broker *core.Broker) *Controller {
 	return &Controller{
 		b: broker,
@@ -160,6 +208,8 @@ func (c *Controller) GetRouter() *mux.Router {
 	r.HandleFunc("/streams", c.handleListStreams())
 	r.HandleFunc("/streams/{name}", c.handleStreams())
 	r.HandleFunc("/streams/{name}/messages", c.handleStreamSubscription())
+	r.HandleFunc("/streams/{name}/messages/pending", c.handlePending())
+	r.HandleFunc("/ack", c.handleAck())
 	r.HandleFunc("/groups/{name}", c.handleGroups())
 	return r
 }
