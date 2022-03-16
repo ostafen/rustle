@@ -58,8 +58,16 @@ func (c *consumer) Stop() {
 
 type streamSubscription struct {
 	consumers    []*consumer
-	pending      map[uint64]struct{}
+	pending      map[string]struct{}
 	nextConsumer int
+}
+
+func (s *streamSubscription) pendingMessages() []string {
+	pending := make([]string, 0, len(s.pending))
+	for id := range s.pending {
+		pending = append(pending, id)
+	}
+	return pending
 }
 
 func (s *streamSubscription) add(c *consumer) {
@@ -85,10 +93,18 @@ func (l *streamSubscription) next() int {
 }
 
 func (l *streamSubscription) send(msg *Message) {
-	l.pending[msg.Timestamp] = struct{}{}
+	l.pending[msg.Id] = struct{}{}
 
-	c := l.consumers[l.next()]
-	c.send(msg)
+	if len(l.consumers) > 0 {
+		c := l.consumers[l.next()]
+		c.send(msg)
+	}
+}
+
+func (s *streamSubscription) ackMessages(ids []string) {
+	for _, id := range ids {
+		delete(s.pending, id)
+	}
 }
 
 type consumerGroup struct {
@@ -111,7 +127,7 @@ func (group *consumerGroup) getOrCreateSubscription(sname string) *streamSubscri
 		group.subscriptions[sname] = &streamSubscription{
 			nextConsumer: 0,
 			consumers:    make([]*consumer, 0),
-			pending:      make(map[uint64]struct{}),
+			pending:      make(map[string]struct{}),
 		}
 	}
 	return group.subscriptions[sname]
@@ -140,16 +156,14 @@ func (group *consumerGroup) removeConsumer(c *consumer) {
 	for sname, subscription := range group.subscriptions {
 		subscription.remove(c.id)
 
-		if len(subscription.consumers) == 0 {
+		if len(subscription.consumers) == 0 && len(subscription.pending) == 0 {
 			delete(group.subscriptions, sname)
 		}
 	}
 }
 
 func (group *consumerGroup) notify(msg *Message) {
-	if subscription, ok := group.subscriptions[msg.Stream]; ok {
-		subscription.send(msg)
-	}
+	group.getOrCreateSubscription(msg.Stream).send(msg)
 }
 
 func (group *consumerGroup) shutdown() {
