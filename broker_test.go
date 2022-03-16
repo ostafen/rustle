@@ -38,22 +38,6 @@ func setupServer(t *testing.T) func() {
 	}
 }
 
-func createStream(sname string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/streams/%s", endpoint, sname), nil)
-	if err != nil {
-		return nil, err
-	}
-	return http.DefaultClient.Do(req)
-}
-
-func deleteStream(sname string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/streams/%s", endpoint, sname), nil)
-	if err != nil {
-		return nil, err
-	}
-	return http.DefaultClient.Do(req)
-}
-
 const endpoint = "http://localhost:8080"
 
 func TestCreateStreamAndDelete(t *testing.T) {
@@ -66,9 +50,7 @@ func TestCreateStreamAndDelete(t *testing.T) {
 
 	n := 100
 	for i := 0; i < n; i++ {
-		resp, err := createStream("stream:" + strconv.Itoa(i))
-		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		require.NoError(t, cli.CreateStream("stream:"+strconv.Itoa(i)))
 	}
 
 	streamInfos, err := cli.ListStreams()
@@ -86,13 +68,10 @@ func TestCreateStreamAndDelete(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		sname := "stream:" + strconv.Itoa(i)
-		resp, err := createStream(sname)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusConflict, resp.StatusCode)
+		require.Error(t, cli.CreateStream(sname))
 
-		resp, err = deleteStream(sname)
+		err := cli.DeleteStream(sname)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	streamInfos, err = cli.ListStreams()
@@ -113,9 +92,12 @@ func TestStreamSubscription(t *testing.T) {
 	close := setupServer(t)
 	defer close()
 
-	resp, err := createStream("test")
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	err := cli.CreateStream("test")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	c := client.NewConsumer(&client.ConsumerConfig{
 		Host: endpoint,
@@ -126,7 +108,7 @@ func TestStreamSubscription(t *testing.T) {
 	go func() {
 		time.Sleep(time.Millisecond * 100)
 		for i := 0; i < n; i++ {
-			resp, err = sendMessage("test", "ciao")
+			resp, err := sendMessage("test", "ciao")
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 		}
@@ -149,9 +131,12 @@ func TestStreamSubscriptionWithGroup(t *testing.T) {
 	close := setupServer(t)
 	defer close()
 
-	resp, err := createStream("test")
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	err := cli.CreateStream("test")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	const n = 100
 	const nConsumers = n / 10
@@ -175,7 +160,7 @@ func TestStreamSubscriptionWithGroup(t *testing.T) {
 	go func() {
 		time.Sleep(time.Millisecond * 100)
 		for i := 0; i < n; i++ {
-			resp, err = sendMessage("test", "ciao")
+			resp, err := sendMessage("test", "ciao")
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 		}
@@ -213,9 +198,12 @@ func TestGetConsumerGroupInfo(t *testing.T) {
 	close := setupServer(t)
 	defer close()
 
-	resp, err := createStream("test-stream")
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	err := cli.CreateStream("test-stream")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	const nConsumers = 100
 
@@ -234,10 +222,6 @@ func TestGetConsumerGroupInfo(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	cli := client.New(&client.ClientConfig{
-		Host: endpoint,
-	})
-
 	info, err := cli.GetConsumerGroupInfo("test-group")
 	require.NoError(t, err)
 	require.Equal(t, nConsumers, len(info.Consumers))
@@ -252,5 +236,4 @@ func TestGetConsumerGroupInfo(t *testing.T) {
 	info, err = cli.GetConsumerGroupInfo("test-group")
 	require.NoError(t, err)
 	require.Equal(t, 0, len(info.Consumers))
-
 }
