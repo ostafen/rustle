@@ -208,3 +208,49 @@ func TestStreamSubscriptionWithGroup(t *testing.T) {
 		require.Equal(t, messagesPerConsumer, counters[i])
 	}
 }
+
+func TestGetConsumerGroupInfo(t *testing.T) {
+	close := setupServer(t)
+	defer close()
+
+	resp, err := createStream("test-stream")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	const nConsumers = 100
+
+	consumers := make([]*client.Consumer, 0)
+	for i := 0; i < nConsumers; i++ {
+		c := client.NewConsumer(&client.ConsumerConfig{
+			Host:  endpoint,
+			Group: "test-group",
+		})
+		consumers = append(consumers, c)
+
+		go func(c *client.Consumer) {
+			c.Subscribe("test-stream")
+		}(c)
+	}
+
+	time.Sleep(time.Millisecond * 100)
+
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	info, err := cli.GetConsumerGroupInfo("test-group")
+	require.NoError(t, err)
+	require.Equal(t, nConsumers, len(info.Consumers))
+
+	for _, c := range consumers {
+		c.Close()
+	}
+
+	// wait a bit for server to clean up all consumer subscriptions
+	time.Sleep(time.Millisecond * 10)
+
+	info, err = cli.GetConsumerGroupInfo("test-group")
+	require.NoError(t, err)
+	require.Equal(t, 0, len(info.Consumers))
+
+}
