@@ -33,34 +33,18 @@ type controller struct {
 	b *core.Broker
 }
 
-func handleStreamSubscription(c *controller, rw http.ResponseWriter, r *http.Request) {
-	// Set the headers related to event streaming.
-	rw.Header().Set("Content-Type", "text/event-stream")
-	rw.Header().Set("Cache-Control", "no-cache")
-	rw.Header().Set("Connection", "keep-alive")
-	rw.Header().Set("Access-Control-Allow-Origin", "*")
-
-	fw := &flushWriter{rw}
-
-	cGroup := r.FormValue("cgroup")
-	stream := mux.Vars(r)["name"]
-
-	consumer, err := c.b.RegisterConsumer(cGroup, fw, stream)
-	if err != nil {
-		rw.WriteHeader(http.StatusNotFound)
-		return
+func (c *controller) handleListStreams(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusBadRequest)
 	}
-	defer c.b.UnregisterConsumer(consumer)
 
-	go func() {
-		<-r.Context().Done()
-		consumer.Stop()
-	}()
+	w.Header().Set("Content-Type", "application/json")
 
-	consumer.Join()
+	channels := c.b.ListStreams()
+	writeJsonBody(w, channels)
 }
 
-func handleStream(c *controller, w http.ResponseWriter, r *http.Request) {
+func (c *controller) handleStreams(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
 
@@ -91,7 +75,34 @@ func handleStream(c *controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleGroups(c *controller, w http.ResponseWriter, r *http.Request) {
+func (c *controller) handleStreamSubscription(rw http.ResponseWriter, r *http.Request) {
+	// Set the headers related to event streaming.
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("Connection", "keep-alive")
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+
+	fw := &flushWriter{rw}
+
+	cGroup := r.FormValue("cgroup")
+	stream := mux.Vars(r)["name"]
+
+	consumer, err := c.b.RegisterConsumer(cGroup, fw, stream)
+	if err != nil {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer c.b.UnregisterConsumer(consumer)
+
+	go func() {
+		<-r.Context().Done()
+		consumer.Stop()
+	}()
+
+	consumer.Join()
+}
+
+func (c *controller) handleGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	groupName := vars["name"]
 
@@ -114,18 +125,7 @@ func handleGroups(c *controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleListStreams(c *controller, w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	channels := c.b.ListStreams()
-	writeJsonBody(w, channels)
-}
-
-func handlePending(c *controller, w http.ResponseWriter, r *http.Request) {
+func (c *controller) handlePending(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -142,7 +142,7 @@ func handlePending(c *controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleAck(c *controller, w http.ResponseWriter, r *http.Request) {
+func (c *controller) handleAck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -161,42 +161,6 @@ func handleAck(c *controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *controller) handleListStreams() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handleListStreams(c, w, r)
-	}
-}
-
-func (c *controller) handleStreams() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handleStream(c, w, r)
-	}
-}
-
-func (c *controller) handleStreamSubscription() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handleStreamSubscription(c, w, r)
-	}
-}
-
-func (c *controller) handleGroups() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handleGroups(c, w, r)
-	}
-}
-
-func (c *controller) handlePending() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handlePending(c, w, r)
-	}
-}
-
-func (c *controller) handleAck() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handleAck(c, w, r)
-	}
-}
-
 func newController() *controller {
 	return &controller{
 		b: core.NewBroker(),
@@ -206,12 +170,12 @@ func newController() *controller {
 func NewHTTPServer(addr string) *http.Server {
 	c := newController()
 	r := mux.NewRouter()
-	r.HandleFunc("/streams", c.handleListStreams())
-	r.HandleFunc("/streams/{name}", c.handleStreams())
-	r.HandleFunc("/streams/{name}/messages", c.handleStreamSubscription())
-	r.HandleFunc("/streams/{name}/messages/pending", c.handlePending())
-	r.HandleFunc("/ack", c.handleAck())
-	r.HandleFunc("/groups/{name}", c.handleGroups())
+	r.HandleFunc("/streams", c.handleListStreams)
+	r.HandleFunc("/streams/{name}", c.handleStreams)
+	r.HandleFunc("/streams/{name}/messages", c.handleStreamSubscription)
+	r.HandleFunc("/streams/{name}/messages/pending", c.handlePending)
+	r.HandleFunc("/ack", c.handleAck)
+	r.HandleFunc("/groups/{name}", c.handleGroups)
 	return &http.Server{
 		Addr:    addr,
 		Handler: r,
