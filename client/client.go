@@ -7,10 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ostafen/rustle/core"
 	"io"
 	"net/http"
-
-	"github.com/ostafen/rustle/core"
 )
 
 type ClientConfig struct {

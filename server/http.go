@@ -1,11 +1,11 @@
-package api
+package server
 
 import (
 	"encoding/json"
+	"github.com/ostafen/rustle/core"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/ostafen/rustle/core"
 )
 
 func writeJsonBody(rw http.ResponseWriter, v interface{}) {
@@ -17,11 +17,11 @@ func writeJsonBody(rw http.ResponseWriter, v interface{}) {
 	}
 }
 
-type FlushWriter struct {
+type flushWriter struct {
 	w http.ResponseWriter
 }
 
-func (fw *FlushWriter) Write(data []byte) (int, error) {
+func (fw *flushWriter) Write(data []byte) (int, error) {
 	n, err := fw.w.Write(data)
 	if err == nil {
 		fw.w.(http.Flusher).Flush()
@@ -29,18 +29,18 @@ func (fw *FlushWriter) Write(data []byte) (int, error) {
 	return n, err
 }
 
-type Controller struct {
+type controller struct {
 	b *core.Broker
 }
 
-func handleStreamSubscription(c *Controller, rw http.ResponseWriter, r *http.Request) {
+func handleStreamSubscription(c *controller, rw http.ResponseWriter, r *http.Request) {
 	// Set the headers related to event streaming.
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("Connection", "keep-alive")
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
-	fw := &FlushWriter{rw}
+	fw := &flushWriter{rw}
 
 	cGroup := r.FormValue("cgroup")
 	stream := mux.Vars(r)["name"]
@@ -60,7 +60,7 @@ func handleStreamSubscription(c *Controller, rw http.ResponseWriter, r *http.Req
 	consumer.Join()
 }
 
-func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
+func handleStream(c *controller, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
 
@@ -91,7 +91,7 @@ func handleStream(c *Controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleGroups(c *Controller, w http.ResponseWriter, r *http.Request) {
+func handleGroups(c *controller, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	groupName := vars["name"]
 
@@ -114,7 +114,7 @@ func handleGroups(c *Controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleListStreams(c *Controller, w http.ResponseWriter, r *http.Request) {
+func handleListStreams(c *controller, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -125,7 +125,7 @@ func handleListStreams(c *Controller, w http.ResponseWriter, r *http.Request) {
 	writeJsonBody(w, channels)
 }
 
-func handlePending(c *Controller, w http.ResponseWriter, r *http.Request) {
+func handlePending(c *controller, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -142,7 +142,7 @@ func handlePending(c *Controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleAck(c *Controller, w http.ResponseWriter, r *http.Request) {
+func handleAck(c *controller, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -161,49 +161,50 @@ func handleAck(c *Controller, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *Controller) handleListStreams() http.HandlerFunc {
+func (c *controller) handleListStreams() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleListStreams(c, w, r)
 	}
 }
 
-func (c *Controller) handleStreams() http.HandlerFunc {
+func (c *controller) handleStreams() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleStream(c, w, r)
 	}
 }
 
-func (c *Controller) handleStreamSubscription() http.HandlerFunc {
+func (c *controller) handleStreamSubscription() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleStreamSubscription(c, w, r)
 	}
 }
 
-func (c *Controller) handleGroups() http.HandlerFunc {
+func (c *controller) handleGroups() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleGroups(c, w, r)
 	}
 }
 
-func (c *Controller) handlePending() http.HandlerFunc {
+func (c *controller) handlePending() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handlePending(c, w, r)
 	}
 }
 
-func (c *Controller) handleAck() http.HandlerFunc {
+func (c *controller) handleAck() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handleAck(c, w, r)
 	}
 }
 
-func NewController(broker *core.Broker) *Controller {
-	return &Controller{
-		b: broker,
+func newController() *controller {
+	return &controller{
+		b: core.NewBroker(),
 	}
 }
 
-func (c *Controller) GetRouter() *mux.Router {
+func NewHTTPServer(addr string) *http.Server {
+	c := newController()
 	r := mux.NewRouter()
 	r.HandleFunc("/streams", c.handleListStreams())
 	r.HandleFunc("/streams/{name}", c.handleStreams())
@@ -211,5 +212,8 @@ func (c *Controller) GetRouter() *mux.Router {
 	r.HandleFunc("/streams/{name}/messages/pending", c.handlePending())
 	r.HandleFunc("/ack", c.handleAck())
 	r.HandleFunc("/groups/{name}", c.handleGroups())
-	return r
+	return &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
 }
