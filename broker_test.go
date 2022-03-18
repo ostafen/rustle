@@ -5,24 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ostafen/rustle/internal/core"
+	"github.com/ostafen/rustle/core"
 	"net/http"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/ostafen/rustle/api"
 	"github.com/ostafen/rustle/client"
+	"github.com/ostafen/rustle/server"
 	"github.com/stretchr/testify/require"
 )
 
 func setupServer(t *testing.T) func() {
-	broker := core.NewBroker()
-	controller := api.NewController(broker)
-
 	var err error
-	s := &http.Server{Addr: ":8080", Handler: controller.GetRouter()}
+	s := server.NewHTTPServer(":8080")
 
 	done := make(chan struct{}, 1)
 	go func() {
