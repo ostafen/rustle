@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ostafen/rustle/core"
 	"net/http"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ostafen/rustle/core"
 
 	"github.com/ostafen/rustle/client"
 	"github.com/ostafen/rustle/server"
@@ -37,7 +38,7 @@ func setupServer(t *testing.T) func() {
 
 const endpoint = "http://localhost:8080"
 
-func TestCreateStreamAndDelete(t *testing.T) {
+func TestCreateAndDeleteStream(t *testing.T) {
 	close := setupServer(t)
 	defer close()
 
@@ -75,6 +76,28 @@ func TestCreateStreamAndDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Empty(t, streamInfos)
+}
+
+func TestCreateAndDeleteConsumerGroup(t *testing.T) {
+	close := setupServer(t)
+	defer close()
+
+	cli := client.New(&client.ClientConfig{
+		Host: endpoint,
+	})
+
+	_, err := cli.GetConsumerGroupInfo("test-group")
+	require.Error(t, err)
+
+	require.NoError(t, cli.CreateConsumerGroup("test-group"))
+
+	_, err = cli.GetConsumerGroupInfo("test-group")
+	require.NoError(t, err)
+
+	require.NoError(t, cli.DeleteConsumerGroup("test-group"))
+
+	_, err = cli.GetConsumerGroupInfo("test-group")
+	require.Error(t, err)
 }
 
 func sendMessage(sname string, body interface{}) (*http.Response, error) {
