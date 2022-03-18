@@ -164,8 +164,6 @@ func (b *Broker) DeleteGroup(name string) {
 
 	delete(b.cGroups, name)
 
-	b.mu.Unlock()
-
 	group.shutdown()
 }
 
