@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ostafen/rustle/core"
 	"io"
 	"net/http"
+
+	"github.com/ostafen/rustle/core"
 )
 
 type ClientConfig struct {
@@ -26,6 +27,40 @@ func New(conf *ClientConfig) *Client {
 	}
 }
 
+func (c *Client) CreateConsumerGroup(cgroup string) error {
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/groups/%s", c.conf.Host, cgroup), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("an error occured during creation of consumer group \"%s\"", cgroup)
+	}
+	return err
+}
+
+func (c *Client) DeleteConsumerGroup(cgroup string) error {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/groups/%s", c.conf.Host, cgroup), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("an error occured during deletion of consumer group \"%s\"", cgroup)
+	}
+	return err
+}
+
 func (c *Client) CreateStream(sname string) error {
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/streams/%s", c.conf.Host, sname), nil)
 	if err != nil {
@@ -38,7 +73,7 @@ func (c *Client) CreateStream(sname string) error {
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("an error occured during creation of stream %s", sname)
+		return fmt.Errorf("an error occured during creation of stream \"%s\"", sname)
 	}
 	return err
 }
