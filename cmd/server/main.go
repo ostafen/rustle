@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/ostafen/rustle/internal/server"
+	"github.com/ostafen/rustle/server"
 	"log"
 )
 

@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"github.com/ostafen/rustle/internal/core"
+	"github.com/ostafen/rustle/core"
 	"net/http"
 
 	"github.com/gorilla/mux"

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ostafen/rustle/internal/core"
+	"github.com/ostafen/rustle/core"
 	"io"
 	"net/http"
 )
