@@ -2,10 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/ostafen/rustle/internal/core"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/ostafen/rustle/core"
 )
 
 func writeJsonBody(rw http.ResponseWriter, v interface{}) {

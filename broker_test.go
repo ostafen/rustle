@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ostafen/rustle/internal/core"
 	"net/http"
 	"strconv"
 	"sync"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/ostafen/rustle/api"
 	"github.com/ostafen/rustle/client"
-	"github.com/ostafen/rustle/core"
 	"github.com/stretchr/testify/require"
 )
 
